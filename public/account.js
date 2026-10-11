@@ -54,16 +54,53 @@ function setupView(token) {
   } }, el('h1', {}, 'Choose a password'), el('p', { class: 'muted' }, 'At least 10 characters. You’ll use it with your email to log in.'), field('New password', pw), err, el('button', { class: 'btn', type: 'submit' }, 'Save & continue')));
 }
 
+function pad2(n) { return String(n).padStart(2, '0'); }
+function endLocalStamp(dateStr, timeStr, addMin = 50) {
+  const [y, mo, d] = dateStr.split('-').map(Number);
+  const [h, mi] = timeStr.split(':').map(Number);
+  const total = h * 60 + mi + addMin;
+  const dt = new Date(Date.UTC(y, mo - 1, d, Math.floor(total / 60), total % 60, 0));
+  return `${dt.getUTCFullYear()}${pad2(dt.getUTCMonth() + 1)}${pad2(dt.getUTCDate())}T${pad2(dt.getUTCHours())}${pad2(dt.getUTCMinutes())}00`;
+}
+
 async function dashboard() {
   let me;
   try { me = await api('/api/account/me'); } catch (e) { return e.status === 401 ? loginView() : show(el('p', { class: 'error' }, e.message)); }
-  const today = new Date().toISOString().slice(0, 10);
+  const today = me.today || new Date().toISOString().slice(0, 10);
   const upcoming = me.bookings.filter((b) => b.status !== 'cancelled' && b.date >= today).reverse();
   const past = me.bookings.filter((b) => !upcoming.includes(b));
+  const dlIcs = (b) => {
+    const title = `${b.service_name} — ${me.brandName || 'Abide & Thrive'}`;
+    const loc = b.mode === 'in_person' ? me.inPersonAddress : 'Online (Video Session)';
+    const desc = b.mode === 'in_person' ? `In-person session at ${me.inPersonAddress}` : (me.onlineInfo || 'Online video session');
+    const startLocal = `${b.date.replace(/-/g, '')}T${b.time.replace(':', '')}00`;
+    const endLocal = endLocalStamp(b.date, b.time, b.duration_min);
+    const ics = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Abide & Thrive//Coaching//EN',
+      'BEGIN:VEVENT',
+      `UID:booking-${b.id}@abideandthrive`,
+      `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '')}`,
+      `DTSTART;TZID=${me.timezone}:${startLocal}`,
+      `DTEND;TZID=${me.timezone}:${endLocal}`,
+      `SUMMARY:${title}`,
+      `LOCATION:${String(loc || '').replace(/,/g, '\\,')}`,
+      `DESCRIPTION:${String(desc || '').replace(/\n/g, '\\n')}`,
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+    const a = el('a', {
+      href: URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' })),
+      download: `session-${b.date}.ics`,
+    });
+    a.click();
+  };
   const card = (b) => el('div', { class: 'item' },
     el('strong', {}, b.service_name), ' ', el('span', { class: `pill ${b.status === 'confirmed' ? '' : b.status}` }, b.status),
     el('p', {}, `${fmtDate(b.date)} at ${fmtTime(b.time)} · ${b.duration_min} min · ${b.mode === 'in_person' ? 'In person' : 'Online'} · ${money(b.price_cents)}${b.price_cents ? (b.paid ? ' (paid)' : ' (unpaid)') : ''}`),
     upcoming.includes(b) ? el('div', { class: 'row' },
+      el('button', { class: 'btn sm plain', type: 'button', onclick: () => dlIcs(b) }, '📅 Add to Calendar'),
       b.canCancel
         ? el('button', { class: 'btn sm plain', onclick: async () => {
           if (!confirm('Cancel this session?')) return;

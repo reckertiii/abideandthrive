@@ -62,7 +62,7 @@ function openTab(name) {
 // ---------- bookings ----------
 async function bookings() {
   const rows = await api('/api/admin/bookings');
-  const today = new Date().toISOString().slice(0, 10);
+  const today = me.today || new Date().toISOString().slice(0, 10);
   const act = (id, body) => run(async () => { await api(`/api/admin/bookings/${id}`, 'PUT', body); toast('Updated'); openTab('bookings'); });
   const table = el('table', {},
     el('thead', {}, el('tr', {}, ...['When', 'Client', 'Service', 'Payment', 'Status', ''].map((h) => el('th', {}, h)))),
@@ -73,7 +73,7 @@ async function bookings() {
       el('td', {}, `${b.mode === 'in_person' ? 'In person' : 'Online'} · ${money(b.price_cents)} · ${b.price_cents === 0 ? '—' : b.paid ? 'paid' : 'unpaid'}`),
       el('td', {}, el('span', { class: `pill ${b.status}` }, b.status), b.date < today ? el('div', { class: 'hint' }, 'past') : ''),
       el('td', {}, el('div', { class: 'row' },
-        b.status !== 'cancelled' ? el('button', { class: 'btn sm plain', onclick: () => { if (confirm('Cancel this booking? The time slot will reopen.')) act(b.id, { status: 'cancelled' })(); } }, 'Cancel') : el('button', { class: 'btn sm plain', onclick: act(b.id, { status: 'confirmed' }) }, 'Restore'),
+        b.status !== 'cancelled' ? el('button', { class: 'btn sm plain', onclick: () => { if (confirm('Cancel this booking? The time slot will reopen and the client will be notified.')) act(b.id, { status: 'cancelled' })(); } }, 'Cancel') : el('button', { class: 'btn sm plain', onclick: act(b.id, { status: 'confirmed' }) }, 'Restore'),
         b.price_cents > 0 && b.status !== 'cancelled' ? el('button', { class: 'btn sm plain', onclick: act(b.id, { status: 'confirmed', paid: !b.paid }) }, b.paid ? 'Mark unpaid' : 'Mark paid') : '')))
     )));
   return el('div', {}, el('h2', {}, 'Bookings'),
@@ -89,6 +89,30 @@ async function content() {
     inputs[key] = opts.area ? area(s[key], opts.area) : text(s[key], opts.type ? { type: opts.type } : {});
     return field(label, inputs[key], opts.hint);
   };
+  const photoInput = text(s.coachPhoto, { placeholder: 'Paste an image URL or upload a photo below' });
+  inputs.coachPhoto = photoInput;
+  const filePicker = el('input', { type: 'file', accept: 'image/*' });
+  filePicker.addEventListener('change', () => {
+    const file = filePicker.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 280;
+        const scale = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement('canvas');
+        c.width = Math.round(img.width * scale);
+        c.height = Math.round(img.height * scale);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        photoInput.value = c.toDataURL('image/jpeg', 0.84);
+        toast('Photo ready — click Save changes below');
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+
   const listEditor = (key, fields, addLabel) => {
     let items = s[key].map((i) => ({ ...i }));
     const box = el('div', { class: 'stack' });
@@ -103,6 +127,20 @@ async function content() {
     draw();
     return { box, get: () => items };
   };
+  const versionPicker = () => {
+    const sel = el('select', {}, ...me.bibleVersions.map((v) => el('option', { value: v.code, selected: s.verseVersion === v.code }, `${v.code} - ${v.name}${v.pd ? ' (public domain)' : ''}`)));
+    const other = text(s.verseAttribution);
+    const otherBox = field('Attribution text (required for “Other”)', other, 'Copy the exact copyright notice your Bible publisher asks for.');
+    const hint = el('p', { class: 'hint' });
+    const sync = () => {
+      const v = me.bibleVersions.find((x) => x.code === sel.value);
+      otherBox.hidden = sel.value !== 'OTHER';
+      hint.textContent = sel.value === 'OTHER' ? '' : v.pd ? 'Public domain: free to quote. A short attribution line is still shown in the footer.' : 'Copyrighted translation. The publisher’s required notice is added to the footer automatically. Check the publisher’s limits on how much you may quote (usually fine for a verse or two).';
+    };
+    sel.addEventListener('change', sync); sync();
+    inputs.verseVersion = sel; inputs.verseAttribution = other;
+    return el('div', {}, field('Bible version', sel), hint, otherBox);
+  };
   const steps = listEditor('steps', [['title', 'Step title'], ['body', 'Description', 2]], '+ Add step');
   const faq = listEditor('faq', [['q', 'Question'], ['a', 'Answer', 3]], '+ Add question');
 
@@ -114,8 +152,11 @@ async function content() {
     toast('Saved — site updated');
   }) },
   el('h2', {}, 'Site content'),
-  el('div', { class: 'card' }, el('h3', {}, 'Home page'), simple('brandName', 'Business name'), simple('tagline', 'Tagline (small text above headline)'), simple('heroTitle', 'Headline'), simple('heroSubtitle', 'Intro paragraph', { area: 3 }), simple('verse', 'Scripture verse (optional)', { area: 2, hint: 'Leave blank to hide. Use a translation you have permission to quote (KJV and WEB are public domain).' }), simple('verseRef', 'Verse reference', { hint: 'e.g. John 15:5 (KJV)' })),
-  el('div', { class: 'card' }, el('h3', {}, 'About you'), simple('aboutTitle', 'Section title'), simple('coachName', 'Your name'), simple('coachCredentials', 'Credentials / tagline'), simple('aboutBody', 'About text', { area: 8, hint: 'Leave a blank line between paragraphs.' })),
+  el('div', { class: 'card' }, el('h3', {}, 'Home page'), simple('brandName', 'Business name'), simple('tagline', 'Tagline (small text above headline)'), simple('heroTitle', 'Headline'), simple('heroSubtitle', 'Intro paragraph', { area: 3 }), simple('verse', 'Scripture verse (optional)', { area: 2, hint: 'Type or paste the verse in the version you pick below. Leave blank to hide it.' }), simple('verseRef', 'Verse reference', { hint: 'e.g. John 15:5. The version is added automatically.' }), versionPicker()),
+  el('div', { class: 'card' }, el('h3', {}, 'About you'), simple('aboutTitle', 'Section title'), simple('coachName', 'Your name'), simple('coachCredentials', 'Credentials / tagline'),
+    field('Coach photo (optional)', photoInput, 'Leave blank to show your initials badge, or choose an image file below to resize and embed automatically.'),
+    field('Upload photo file', filePicker),
+    simple('aboutBody', 'About text', { area: 8, hint: 'Leave a blank line between paragraphs.' })),
   el('div', { class: 'card stack' }, el('h3', {}, 'How it works'), simple('approachTitle', 'Box title'), steps.box),
   el('div', { class: 'card stack' }, el('h3', {}, 'FAQ'), faq.box),
   el('div', { class: 'card' }, el('h3', {}, 'Contact & footer'), el('div', { class: 'two' }, simple('email', 'Contact email'), simple('phone', 'Phone (optional)')), simple('location', 'Short location line (footer)', { hint: 'e.g. “Online or in person in Austin, TX”' }), simple('inPersonAddress', 'In-person address', { hint: 'Shown to clients who choose an in-person session.' }), simple('onlineInfo', 'Online session note', { hint: 'Shown to clients who choose online, e.g. how they will get the video link.' }), simple('disclaimer', 'Disclaimer shown in footer', { area: 3 })),
@@ -148,7 +189,8 @@ async function services() {
     }) },
     field('Service name', name), field('Description', desc),
     el('div', { class: 'two' }, field('Length (minutes)', dur), field('Price (USD)', price, 'Enter 0 for a free session.')),
-    el('div', { class: 'two' }, field('Format', format), field('Display order', sort), el('label', { class: 'check' }, active, el('span', {}, 'Show on website & allow booking'))),
+    el('div', { class: 'two' }, field('Format', format), field('Display order', sort)),
+    el('label', { class: 'check' }, active, el('span', {}, 'Show on website & allow booking')),
     el('div', { class: 'row' }, el('button', { class: 'btn sm', type: 'submit' }, isNew ? 'Add service' : 'Save'),
       isNew ? '' : el('button', { type: 'button', class: 'btn sm danger', onclick: run(async () => { if (confirm(`Delete “${s.name}”? Existing bookings are kept.`)) { await api(`/api/admin/services/${s.id}`, 'DELETE'); toast('Deleted'); openTab('services'); } }) }, 'Delete')));
   };

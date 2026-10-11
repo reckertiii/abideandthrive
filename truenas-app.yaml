@@ -1,0 +1,23 @@
+# TrueNAS SCALE: Apps > Discover Apps > Custom App > ⋮ Install via YAML
+# Change the 4 lines marked CHANGE ME, then paste everything below into the YAML box.
+services:
+  abide:
+    image: ghcr.io/reckertiii/abideandthrive:latest
+    restart: unless-stopped
+    ports:
+      - "8090:3000"
+    environment:
+      PORT: "3000"
+      DATA_DIR: /data
+      SITE_URL: "http://192.168.1.50:8090"      # CHANGE ME: your TrueNAS IP + the port above
+      ADMIN_EMAIL: "you@example.com"            # CHANGE ME: admin login (first start only)
+      ADMIN_PASSWORD: "use-a-long-password-here" # CHANGE ME: admin password (first start only)
+      # --- optional: online payments (use sandbox keys while testing) ---
+      # SQUARE_ENV: "sandbox"
+      # SQUARE_ACCESS_TOKEN: ""
+      # SQUARE_LOCATION_ID: ""
+      # --- optional: real emails (otherwise they print in the app logs) ---
+      # RESEND_API_KEY: ""
+      # MAIL_FROM: "Abide & Thrive <hello@yourdomain.com>"
+    volumes:
+      - /mnt/tank/apps/abide/data:/data          # CHANGE ME: your pool/dataset path (create the folder first)

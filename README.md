@@ -1,4 +1,4 @@
-# Abide & Thrive â€” coaching website
+# Abide & Thrive — coaching website
 
 Booking, Square payments, testimonials, and an admin area to edit everything. Needs Node 22.5+ (uses built-in SQLite).
 
@@ -16,8 +16,8 @@ Set `ADMIN_EMAIL` / `ADMIN_PASSWORD` in `.env` before the first run to choose yo
 ## Install from GitHub (recommended for TrueNAS or any Docker host)
 Every push to `main` triggers `.github/workflows/docker.yml`, which builds the image and publishes it to `ghcr.io/reckertiii/abideandthrive:latest`.
 1. Push the code (see below) and wait for the **Actions** tab to show a green check.
-2. If the repo is private, create a GitHub token (Settings â†’ Developer settings â†’ Personal access tokens â†’ classic) with only `read:packages`, and add `ghcr.io` / your username / the token under TrueNAS **Apps â†’ Settings â†’ Manage Container Images**. Public repos: make the package public under the repo's **Packages** settings instead.
-3. In TrueNAS **Apps â†’ Discover Apps â†’ Custom App â†’ Install via YAML**:
+2. If the repo is private, create a GitHub token (Settings → Developer settings → Personal access tokens → classic) with only `read:packages`, and add `ghcr.io` / your username / the token under TrueNAS **Apps → Settings → Manage Container Images**. Public repos: make the package public under the repo's **Packages** settings instead.
+3. In TrueNAS **Apps → Discover Apps → Custom App → Install via YAML**:
 ```yaml
 services:
   abide:
@@ -45,7 +45,7 @@ git push -u origin main
 Needs TrueNAS SCALE 24.10 or newer (Docker-based Apps). Older "Kubernetes" apps and TrueNAS CORE differ.
 1. **Datasets:** create `apps/abide` with two folders, `app` and `data` (e.g. `/mnt/tank/apps/abide/app`, `/mnt/tank/apps/abide/data`).
 2. **Copy the project** into the `app` folder (SMB share or `scp`): `server.js`, `package.json`, `package-lock.json`, `public/`. Don't copy `node_modules`, `data`, or `.env`.
-3. **Apps â†’ Discover Apps â†’ Custom App â†’ â‹® Install via YAML**, name it `abide`, paste (adjust paths, port, IP, password):
+3. **Apps → Discover Apps → Custom App → ⋮ Install via YAML**, name it `abide`, paste (adjust paths, port, IP, password):
 ```yaml
 services:
   abide:
@@ -72,17 +72,17 @@ services:
 Notes for testing: use Square **sandbox** keys only, since the Square webhook can't reach a private address (the site still confirms payment when the client returns from checkout). Everything is plain HTTP on your LAN, which is fine for testing but not for real clients. When ready to go live, copy `data/site.db` to your real host to keep your content and bookings, or start clean.
 
 ## What the admin can edit (`/admin`)
-- **Bookings** â€“ view, cancel/restore, mark paid
-- **Site content** â€“ headline, about, how-it-works steps, FAQ, contact info, disclaimer, booking rules (time zone, notice, buffer, days off)
-- **Services** â€“ add/edit/hide/delete services, length, and price ($0 = free)
-- **Availability** â€“ weekly hours
-- **Testimonials** â€“ approve client submissions, edit, unpublish, or record your own
-- **Account** â€“ change login email/password
+- **Bookings** – view, cancel/restore, mark paid
+- **Site content** – headline, about, coach photo, how-it-works steps, FAQ, contact info, disclaimer, booking rules (time zone, notice, buffer, days off)
+- **Services** – add/edit/hide/delete services, length, and price ($0 = free)
+- **Availability** – weekly hours
+- **Testimonials** – approve client submissions, edit, unpublish, or record your own
+- **Account** – change login email/password
 
 ## Client accounts & email
-- Anyone can book as a guest. After booking they're offered a free account: we email a link (verifies they own the email), they choose a password, and `/account` shows their bookings, lets them cancel (up to your minimum-notice window) and edit their details. "Forgot password" works the same way.
-- Emails sent: booking confirmation to the client, new-booking alert and cancellation alerts to you (the contact email in Site content), account/reset links.
-- Set `RESEND_API_KEY` and `MAIL_FROM` (a sender on a domain you've verified with resend.com). Without them, emails are printed to the server console instead of sent â€” fine for testing, but account links won't reach clients.
+- Anyone can book as a guest. After booking they're offered a free account: we email a link (verifies they own the email), they choose a password, and `/account` shows their bookings, lets them add sessions to their calendar, cancel (up to your minimum-notice window), and edit their details. "Forgot password" works the same way.
+- Emails sent: booking confirmation to the client, new-booking alert and cancellation alerts to you (the contact email in Site content), client cancellation notice if canceled by admin, and account/reset links.
+- Set `RESEND_API_KEY` and `MAIL_FROM` (a sender on a domain you've verified with resend.com). Without them, emails are printed to the server console instead of sent — fine for testing, but account links won't reach clients.
 - Online cancellation does **not** refund payments automatically. The alert email to you says when a paid booking was canceled so you can refund it in Square.
 - `DATA_DIR` env var changes where the database lives (point it at your host's persistent disk).
 
@@ -95,6 +95,6 @@ Without Square keys, paid sessions are booked as "pay at session". Unpaid checko
 
 ## Before going live
 - Replace the placeholder text (name, bio, FAQ, cancellation policy) in Admin > Site content, and review the disclaimer wording with your own professional/legal advice.
-- Deploy behind HTTPS (e.g. Render, Railway, Fly.io, a VPS). Keep the `data/` folder on persistent storage and back it up â€” it holds all bookings and content.
-- No confirmation emails are sent yet; clients see an on-screen confirmation and you see bookings in admin. Adding email (e.g. via Resend or SMTP) is the natural next step.
+- Deploy behind HTTPS (e.g. Render, Railway, Fly.io, a VPS, or reverse proxy). Keep the `data/` folder on persistent storage and back it up — it holds all bookings and content.
+- Configure `RESEND_API_KEY` and `MAIL_FROM` so clients receive confirmation and account-setup emails.
 - Don't collect session notes or health details beyond what's needed; if you handle clients' health information, check your local privacy rules (e.g. HIPAA applies only if you're a covered provider).

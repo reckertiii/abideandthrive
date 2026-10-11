@@ -25,13 +25,77 @@ function paragraphs(text) {
   return String(text).split(/\n\s*\n/).filter(Boolean).map((p) => el('p', {}, p));
 }
 
+function addDays(dateStr, days) {
+  const d = new Date(dateStr + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() + Number(days || 60));
+  return d.toISOString().slice(0, 10);
+}
+
+function initialsFor(name, brand) {
+  const src = name && !/your name here/i.test(name) ? name : (brand || 'AT');
+  return src.split(/[\s&]+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('');
+}
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function icsStamp(dateStr, timeStr, addMin = 0) {
+  const [y, mo, d] = dateStr.split('-').map(Number);
+  const [h, mi] = timeStr.split(':').map(Number);
+  const total = h * 60 + mi + addMin;
+  const dt = new Date(Date.UTC(y, mo - 1, d, Math.floor(total / 60), total % 60, 0));
+  return `${dt.getUTCFullYear()}${pad2(dt.getUTCMonth() + 1)}${pad2(dt.getUTCDate())}T${pad2(dt.getUTCHours())}${pad2(dt.getUTCMinutes())}00Z`;
+}
+
+function calendarActions(booking) {
+  const s = site.settings;
+  const title = `${booking.serviceName} — ${s.brandName}`;
+  const loc = booking.mode === 'in_person' ? s.inPersonAddress : 'Online (Video Session)';
+  const desc = booking.mode === 'in_person' ? `In-person session at ${s.inPersonAddress}` : s.onlineInfo;
+  const startLocal = `${booking.date.replace(/-/g, '')}T${booking.time.replace(':', '')}00`;
+  const endStamp = icsStamp(booking.date, booking.time, booking.durationMin || 50).replace(/Z$/, '');
+
+  const dlIcs = () => {
+    const ics = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//Abide & Thrive//Coaching//EN',
+      'BEGIN:VEVENT',
+      `UID:booking-${Date.now()}@abideandthrive`,
+      `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '')}`,
+      `DTSTART;TZID=${s.timezone}:${startLocal}`,
+      `DTEND;TZID=${s.timezone}:${endStamp}`,
+      `SUMMARY:${title}`,
+      `LOCATION:${loc.replace(/,/g, '\\,')}`,
+      `DESCRIPTION:${desc.replace(/\n/g, '\\n')}`,
+      'END:VEVENT',
+      'END:VCALENDAR',
+    ].join('\r\n');
+    const a = el('a', {
+      href: URL.createObjectURL(new Blob([ics], { type: 'text/calendar;charset=utf-8' })),
+      download: 'coaching-session.ics',
+    });
+    a.click();
+  };
+
+  const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${startLocal}/${endStamp}&ctz=${encodeURIComponent(s.timezone)}&details=${encodeURIComponent(desc)}&location=${encodeURIComponent(loc)}`;
+
+  return el('div', { class: 'notice-actions' },
+    el('button', { class: 'btn small ghost', type: 'button', onclick: dlIcs }, '📅 Add to Calendar (.ics)'),
+    el('a', { class: 'btn small ghost', href: gcalUrl, target: '_blank', rel: 'noopener' }, 'Google Calendar ↗'));
+}
+
 function render() {
   const s = site.settings;
   document.title = `${s.brandName} | Christian Mental Health Coaching`;
   $('brand').textContent = s.brandName; $('fBrand').textContent = s.brandName;
   $('tagline').textContent = s.tagline; $('heroTitle').textContent = s.heroTitle; $('heroSubtitle').textContent = s.heroSubtitle;
-  $('verse').textContent = s.verse ? `“${s.verse}”` : ''; $('verseRef').textContent = s.verseRef; $('verseBox').hidden = !s.verse;
+  $('verse').textContent = s.verse ? `“${s.verse}”` : ''; $('verseRef').textContent = s.verseCite; $('verseNotice').textContent = s.verseNotice ? `Scripture: ${s.verseNotice}` : ''; $('verseBox').hidden = !s.verse;
   $('aboutTitle').textContent = s.aboutTitle; $('coachName').textContent = s.coachName; $('coachCredentials').textContent = s.coachCredentials;
+  const av = $('coachAvatar');
+  if (av) {
+    av.replaceChildren(s.coachPhoto
+      ? el('img', { src: s.coachPhoto, alt: s.coachName })
+      : el('span', {}, initialsFor(s.coachName, s.brandName)));
+  }
   $('aboutBody').replaceChildren(...paragraphs(s.aboutBody));
   $('approachTitle').textContent = s.approachTitle;
   $('steps').replaceChildren(...s.steps.map((st) => el('li', {}, el('strong', {}, st.title), st.body)));
@@ -43,6 +107,7 @@ function render() {
   $('tzNote').textContent = `Times shown in ${s.timezone.replace(/_/g, ' ')} time.`;
 
   $('serviceList').replaceChildren(...site.services.map((v) => el('article', { class: 'card' },
+    ...(v.priceCents === 0 ? [el('span', { class: 'svc-badge' }, 'Start here')] : []),
     el('h3', {}, v.name),
     el('p', { class: 'price' }, money(v.priceCents)),
     el('p', { class: 'meta' }, `${v.durationMin} minutes · ${FORMAT[v.format]}`),
@@ -61,11 +126,19 @@ function render() {
 
   $('faqList').replaceChildren(...s.faq.map((f) => el('details', { class: 'q' }, el('summary', {}, f.q), el('p', {}, f.a))));
 
-  $('dateInput').min = new Date().toISOString().slice(0, 10);
+  const today = site.today || new Date().toISOString().slice(0, 10);
+  $('dateInput').min = today;
+  $('dateInput').max = addDays(today, s.horizonDays);
   $('payNote').textContent = site.payments
     ? 'Paid sessions are completed through secure Square checkout.'
     : 'Payment for paid sessions is collected at your appointment.';
   if (!site.services.length) $('booker').hidden = true;
+  if (site.client) {
+    const f = $('bookForm');
+    if (f.name && !f.name.value) f.name.value = site.client.name || '';
+    if (f.email && !f.email.value) f.email.value = site.client.email || '';
+    if (f.phone && !f.phone.value) f.phone.value = site.client.phone || '';
+  }
 }
 
 function pickService(id) {
@@ -109,10 +182,11 @@ function updateSummary() {
     : state.service.priceCents > 0 && site.payments ? `Continue to payment (${money(state.service.priceCents)})` : 'Confirm booking';
 }
 
-function notice(text, warn, email) {
-  const box = el('div', { class: `notice${warn ? ' warn' : ''}` }, text);
-  if (email) {
-    const offer = el('p', {}, 'Want to view or cancel your bookings online later? ');
+function notice(text, warn, email, booking) {
+  const box = el('div', { class: `notice${warn ? ' warn' : ''}` }, el('div', {}, text));
+  if (booking) box.append(calendarActions(booking));
+  if (email && !site.client) {
+    const offer = el('p', { class: 'notice-actions' }, 'Want to view or cancel your bookings online later? ');
     const btn = el('button', { class: 'btn small', type: 'button' }, 'Create a free account');
     btn.addEventListener('click', async () => {
       btn.disabled = true;
@@ -141,12 +215,15 @@ $('bookForm').addEventListener('submit', async (e) => {
   if (!f.consent.checked) { err.textContent = 'Please confirm the disclaimer checkbox.'; return; }
   $('bookBtn').disabled = true;
   try {
+    const booked = { serviceName: state.service.name, date: state.date, time: state.time, durationMin: state.service.durationMin, mode: state.mode };
     const r = await api('/api/bookings', { method: 'POST', body: {
       serviceId: state.service.id, mode: state.mode, date: state.date, time: state.time,
       name: f.name.value, email: f.email.value, phone: f.phone.value, notes: f.notes.value, consent: true } });
     if (r.checkoutUrl) { location.href = r.checkoutUrl; return; }
-    notice(`You’re booked! ${state.service.name} (${modeLabel(state.mode)}) on ${fmtDate(state.date)} at ${fmtTime(state.time)}.${r.payLater ? ' Payment is due at your appointment.' : ''} A confirmation email is on its way.`, false, r.email);
-    f.reset(); state.time = ''; loadSlots(); updateSummary();
+    notice(`You’re booked! ${booked.serviceName} (${modeLabel(booked.mode)}) on ${fmtDate(booked.date)} at ${fmtTime(booked.time)}.${r.payLater ? ' Payment is due at your appointment.' : ''} A confirmation email is on its way.`, false, r.email, booked);
+    f.reset();
+    if (site.client) { f.name.value = site.client.name || ''; f.email.value = site.client.email || ''; f.phone.value = site.client.phone || ''; }
+    state.time = ''; loadSlots(); updateSummary();
   } catch (ex) {
     err.textContent = ex.message; updateSummary(); loadSlots();
   }
@@ -166,11 +243,16 @@ $('tForm').addEventListener('submit', async (e) => {
 
 async function handleReturn() {
   const q = new URLSearchParams(location.search);
-  if (q.get('orderId') || q.get('paid')) {
+  const paidId = q.get('paid') || '';
+  const orderId = q.get('orderId') || q.get('order_id') || '';
+  if (paidId || orderId) {
     try {
-      const b = await api(`/api/bookings/confirm?order_id=${encodeURIComponent(q.get('orderId') || '')}`);
-      if (b.paid) notice(`Payment received — you’re booked! ${b.serviceName} on ${fmtDate(b.date)} at ${fmtTime(b.time)}. A confirmation email is on its way.`, false, b.email);
-      else notice('We haven’t received confirmation of your payment yet. If you were charged, please email us.', true);
+      const b = await api(`/api/bookings/confirm?id=${encodeURIComponent(paidId)}&order_id=${encodeURIComponent(orderId)}`);
+      if (b.paid || b.status === 'confirmed') {
+        notice(`Payment received — you’re booked! ${b.serviceName} on ${fmtDate(b.date)} at ${fmtTime(b.time)}. A confirmation email is on its way.`, false, b.email, b);
+      } else {
+        notice('We haven’t received confirmation of your payment yet. If you were charged, please email us.', true);
+      }
     } catch { notice('We couldn’t find that booking. Please contact us if you were charged.', true); }
     history.replaceState(null, '', '/#book');
   }

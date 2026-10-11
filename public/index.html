@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Abide &amp; Thrive | Christian Mental Health Coaching</title>
   <meta name="description" content="Faith-centered, one-on-one Christian mental health coaching. Book a session online.">
+  <meta property="og:title" content="Abide &amp; Thrive | Christian Mental Health Coaching">
+  <meta property="og:description" content="Faith-centered, one-on-one Christian mental health coaching to help you manage stress, build healthy habits, and grow in peace and purpose.">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -25,19 +29,44 @@
 
   <main id="main">
     <section class="hero" id="top">
-      <div class="wrap">
-        <p class="eyebrow" id="tagline"></p>
-        <h1 id="heroTitle"></h1>
-        <p class="lead" id="heroSubtitle"></p>
-        <blockquote class="verse" id="verseBox" hidden><span id="verse"></span> <cite id="verseRef"></cite></blockquote>
-        <p><a class="btn" href="#book">Book a session</a> <a class="btn ghost" href="#services">See services</a></p>
+      <div class="wrap hero-grid">
+        <div>
+          <p class="eyebrow" id="tagline"></p>
+          <h1 id="heroTitle"></h1>
+          <p class="lead" id="heroSubtitle"></p>
+          <blockquote class="verse" id="verseBox" hidden><span id="verse"></span> <cite id="verseRef"></cite></blockquote>
+          <p class="hero-actions"><a class="btn" href="#book">Book a session</a> <a class="btn ghost" href="#services">See services</a></p>
+        </div>
+        <aside class="hero-card" aria-label="Coaching highlights">
+          <div class="hero-badge">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></svg>
+            <span>A safe, grace-filled space</span>
+          </div>
+          <ul class="pillars">
+            <li>
+              <strong>Rooted in faith &amp; Scripture</strong>
+              <span>Biblical encouragement and prayer woven into sessions at your comfort level.</span>
+            </li>
+            <li>
+              <strong>Practical, everyday tools</strong>
+              <span>Actionable habits for stress, boundaries, burnout, and life transitions.</span>
+            </li>
+            <li>
+              <strong>Flexible &amp; confidential</strong>
+              <span>Meet online by private video or in person—starting with a free discovery call.</span>
+            </li>
+          </ul>
+        </aside>
       </div>
     </section>
 
     <section id="about" class="wrap split">
       <div>
         <h2 id="aboutTitle"></h2>
-        <p class="who"><strong id="coachName"></strong><br><span id="coachCredentials" class="muted"></span></p>
+        <div class="coach-head">
+          <div class="coach-avatar" id="coachAvatar" aria-hidden="true"></div>
+          <p class="who"><strong id="coachName"></strong><br><span id="coachCredentials" class="muted"></span></p>
+        </div>
         <div id="aboutBody"></div>
       </div>
       <div class="card soft">
@@ -119,6 +148,7 @@
   <footer>
     <div class="wrap">
       <p class="disclaimer" id="disclaimer"></p>
+      <p class="muted small" id="verseNotice"></p>
       <p><span id="fLocation"></span> · <a id="fEmail" href="#"></a> <span id="fPhoneWrap"></span></p>
       <p class="muted small">© <span id="year"></span> <span id="fBrand"></span> · <a href="/admin">Admin</a></p>
     </div>

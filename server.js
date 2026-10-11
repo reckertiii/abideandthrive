@@ -61,10 +61,13 @@ const DEFAULTS = {
   heroTitle: 'You don’t have to carry it all alone.',
   heroSubtitle: 'Faith-centered, one-on-one coaching to help you manage stress, build healthy habits, and grow in peace and purpose — at a pace that feels safe.',
   verse: 'I am the vine, ye are the branches: He that abideth in me, and I in him, the same bringeth forth much fruit.',
-  verseRef: 'John 15:5 (KJV)',
+  verseRef: 'John 15:5',
+  verseVersion: 'KJV',
+  verseAttribution: '',
   aboutTitle: 'Meet your coach',
   coachName: 'Your Name Here',
   coachCredentials: 'Add your credentials and certifications here',
+  coachPhoto: '',
   aboutBody: 'Tell your story here. Share your walk with Christ, why you became a coach, who you love working with, and what clients can expect when they work with you.\n\nSeparate paragraphs with a blank line.',
   approachTitle: 'How coaching works',
   steps: [
@@ -93,6 +96,29 @@ const DEFAULTS = {
   disclaimer: 'Christian coaching is not therapy or medical care and is not intended for emergencies. If you are in crisis or thinking about harming yourself, call or text 988 (U.S. Suicide & Crisis Lifeline) or call 911.',
 };
 
+// Bible versions and their required attribution. The verse text itself is typed in by the admin; nothing is bundled.
+const BIBLE_VERSIONS = {
+  KJV: { name: 'King James Version', pd: true, notice: 'Scripture quotations are from the King James Version (KJV), which is in the public domain.' },
+  WEB: { name: 'World English Bible', pd: true, notice: 'Scripture quotations are from the World English Bible (WEB), which is in the public domain.' },
+  ASV: { name: 'American Standard Version', pd: true, notice: 'Scripture quotations are from the American Standard Version (ASV), which is in the public domain.' },
+  ESV: { name: 'English Standard Version', notice: 'Scripture quotations are from the ESV® Bible (The Holy Bible, English Standard Version®), © 2001 by Crossway, a publishing ministry of Good News Publishers. Used by permission. All rights reserved.' },
+  NIV: { name: 'New International Version', notice: 'Scripture quotations taken from The Holy Bible, New International Version® NIV®. Copyright © 1973, 1978, 1984, 2011 by Biblica, Inc.® Used by permission. All rights reserved worldwide.' },
+  NLT: { name: 'New Living Translation', notice: 'Scripture quotations are taken from the Holy Bible, New Living Translation, copyright © 1996, 2004, 2015 by Tyndale House Foundation. Used by permission of Tyndale House Publishers, a Division of Tyndale House Ministries, Carol Stream, Illinois 60188. All rights reserved.' },
+  NKJV: { name: 'New King James Version', notice: 'Scripture taken from the New King James Version®. Copyright © 1982 by Thomas Nelson. Used by permission. All rights reserved.' },
+  NASB: { name: 'New American Standard Bible', notice: 'Scripture quotations taken from the (NASB®) New American Standard Bible®, Copyright © 1960, 1971, 1977, 1995, 2020 by The Lockman Foundation. Used by permission. All rights reserved. www.lockman.org' },
+  CSB: { name: 'Christian Standard Bible', notice: 'Scripture quotations marked CSB have been taken from the Christian Standard Bible®, Copyright © 2017 by Holman Bible Publishers. Used by permission. Christian Standard Bible® and CSB® are federally registered trademarks of Holman Bible Publishers.' },
+};
+const bibleList = () => [...Object.entries(BIBLE_VERSIONS).map(([code, v]) => ({ code, name: v.name, pd: !!v.pd })), { code: 'OTHER', name: 'Other (write your own attribution)', pd: false }];
+function verseDisplay(s) {
+  if (!s.verse) return { verseCite: '', verseNotice: '' };
+  const v = BIBLE_VERSIONS[s.verseVersion];
+  const hasParen = /\([^)]*\)\s*$/.test(s.verseRef);
+  return {
+    verseCite: v && !hasParen ? `${s.verseRef} (${s.verseVersion})` : s.verseRef,
+    verseNotice: v ? v.notice : s.verseAttribution,
+  };
+}
+
 const getSettings = () => {
   const out = { ...DEFAULTS };
   for (const r of db.prepare('SELECT key, value FROM settings').all()) {
@@ -119,6 +145,25 @@ if (!db.prepare('SELECT COUNT(*) c FROM services').get().c) {
 }
 db.prepare('UPDATE services SET description = ? WHERE description = ?').run('A short, no-pressure conversation about your goals and how faith-centered coaching could help. No obligation.', OLD_DISCOVERY);
 db.prepare('UPDATE services SET description = ? WHERE description = ?').run('A focused one-on-one session on stress, habits, boundaries, motivation, or whatever matters most right now, with Scripture and prayer if you’d like them.', OLD_SESSION);
+const verseRow = db.prepare("SELECT value FROM settings WHERE key = 'verse'").get();
+if (verseRow && verseRow.value.includes('in them.,')) {
+  db.prepare("UPDATE settings SET value = ? WHERE key = 'verse'").run(verseRow.value.replace('in them.,', 'in them,'));
+}
+// one-time: infer the Bible version from a reference like "John 15:5 (NLT)" saved before versions existed
+if (!db.prepare("SELECT 1 FROM settings WHERE key = 'verseVersion'").get()) {
+  let code = 'KJV';
+  const refRow = db.prepare("SELECT value FROM settings WHERE key = 'verseRef'").get();
+  if (refRow) {
+    try {
+      const ref = JSON.parse(refRow.value), m = ref.match(/\(([A-Za-z]+)\)\s*$/);
+      if (m && BIBLE_VERSIONS[m[1].toUpperCase()]) {
+        code = m[1].toUpperCase();
+        db.prepare("UPDATE settings SET value = ? WHERE key = 'verseRef'").run(JSON.stringify(ref.replace(/\s*\([A-Za-z]+\)\s*$/, '')));
+      }
+    } catch { /* leave as is */ }
+  }
+  db.prepare("INSERT INTO settings (key, value) VALUES ('verseVersion', ?)").run(JSON.stringify(code));
+}
 const adminCount = db.prepare('SELECT COUNT(*) c FROM admins').get().c;
 if (!adminCount) {
   const email = (process.env.ADMIN_EMAIL || 'admin@example.com').toLowerCase();
@@ -144,6 +189,7 @@ function checkPw(pw, salt, hash) {
 
 // ---------- sessions & rate limiting ----------
 const sessions = new Map(); // token -> { adminId, exp }
+const csessions = new Map(); // token -> { clientId, exp }
 const SESSION_MS = 8 * 3600 * 1000;
 const parseCookies = (req) => Object.fromEntries((req.headers.cookie || '').split(';').map((c) => c.trim().split('=')).filter((p) => p[0]).map(([k, ...v]) => [k, decodeURIComponent(v.join('='))]));
 const isSecure = SITE_URL.startsWith('https');
@@ -163,7 +209,13 @@ const limit = (name, max, windowMs) => (req, res, next) => {
   arr.push(now); hits.set(key, arr);
   next();
 };
-setInterval(() => { const now = Date.now(); for (const [k, v] of sessions) if (v.exp < now) sessions.delete(k); hits.clear(); }, 3600 * 1000).unref();
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of sessions) if (v.exp < now) sessions.delete(k);
+  for (const [k, v] of csessions) if (v.exp < now) csessions.delete(k);
+  try { db.prepare('DELETE FROM tokens WHERE expires < ?').run(now); } catch { /* ignore */ }
+  hits.clear();
+}, 3600 * 1000).unref();
 
 // ---------- scheduling helpers ----------
 const toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
@@ -178,6 +230,7 @@ function nowIn(tz) {
   return { date: `${parts.year}-${parts.month}-${parts.day}`, min: Number(parts.hour) * 60 + Number(parts.minute) };
 }
 const dayDiff = (a, b) => Math.round((Date.parse(b + 'T00:00:00Z') - Date.parse(a + 'T00:00:00Z')) / 86400000);
+const hoursUntil = (date, time, tz) => { const n = nowIn(tz); return (dayDiff(n.date, date) * 1440 + toMin(time) - n.min) / 60; };
 
 function activeBookings(date) {
   const holdCutoff = Date.now() - 30 * 60 * 1000;
@@ -185,7 +238,7 @@ function activeBookings(date) {
 }
 function slotsFor(service, date, settings) {
   if (!isDate(date)) return [];
-  const { date: today, min: nowMin } = nowIn(settings.timezone);
+  const { date: today } = nowIn(settings.timezone);
   const diff = dayDiff(today, date);
   if (diff < 0 || diff > settings.horizonDays) return [];
   const blocked = String(settings.blockedDates).split(/[\s,]+/).filter(Boolean);
@@ -193,15 +246,15 @@ function slotsFor(service, date, settings) {
   const weekday = new Date(date + 'T00:00:00Z').getUTCDay();
   const windows = db.prepare('SELECT start, end FROM availability WHERE weekday = ? ORDER BY start').all(weekday);
   const taken = activeBookings(date).map((b) => [toMin(b.time), toMin(b.time) + b.duration_min + settings.bufferMin]);
-  const step = service.duration_min + settings.bufferMin;
+  const step = Math.min(30, service.duration_min + settings.bufferMin);
   const out = [];
   for (const w of windows) {
     for (let s = toMin(w.start); s + service.duration_min <= toMin(w.end); s += step) {
-      if (diff === 0 && s < nowMin + settings.minNoticeHours * 60) continue;
-      if (diff === 1 && (24 + s / 60 - nowMin / 60) < settings.minNoticeHours) continue;
+      const hhmm = toHHMM(s);
+      if (hoursUntil(date, hhmm, settings.timezone) < settings.minNoticeHours) continue;
       const e = s + service.duration_min + settings.bufferMin;
       if (taken.some(([a, b]) => s < b && e > a)) continue;
-      out.push(toHHMM(s));
+      if (!out.includes(hhmm)) out.push(hhmm);
     }
   }
   return out;
@@ -216,7 +269,7 @@ app.use((req, res, next) => {
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'same-origin',
-    'Content-Security-Policy': "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; form-action 'self'; frame-ancestors 'none'",
+    'Content-Security-Policy': "default-src 'self'; img-src 'self' data: https:; style-src 'self'; script-src 'self'; form-action 'self'; frame-ancestors 'none'",
   });
   next();
 });
@@ -240,7 +293,7 @@ function markPaid(orderId) {
   if (r.changes) sendBookingEmails(db.prepare('SELECT id FROM bookings WHERE payment_ref = ?').get(orderId).id);
 }
 
-app.use(express.json({ limit: '100kb' }));
+app.use(express.json({ limit: '350kb' }));
 app.use('/api', (req, res, next) => {
   if (req.method !== 'GET' && !req.is('application/json')) return res.status(415).json({ error: 'JSON required' });
   next();
@@ -252,9 +305,12 @@ const emailOk = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
 // ----- public API -----
 app.get('/api/site', (req, res) => {
+  const settings = getSettings();
   const services = db.prepare('SELECT * FROM services WHERE active = 1 ORDER BY sort, id').all().map(publicService);
   const testimonials = db.prepare('SELECT name, rating, body, created_at FROM testimonials WHERE approved = 1 ORDER BY created_at DESC').all();
-  res.json({ settings: getSettings(), services, testimonials, payments: Boolean(square) });
+  const cs = csessions.get(parseCookies(req).csid);
+  const client = cs && cs.exp >= Date.now() ? db.prepare('SELECT name, email, phone FROM clients WHERE id = ?').get(cs.clientId) : null;
+  res.json({ settings: { ...settings, ...verseDisplay(settings) }, services, testimonials, payments: Boolean(square), today: nowIn(settings.timezone).date, client: client || null });
 });
 
 app.get('/api/slots', (req, res) => {
@@ -302,14 +358,19 @@ app.post('/api/bookings', limit('book', 10, 3600 * 1000), async (req, res) => {
 // Called when the client returns from Square (works even if the webhook is not set up yet)
 app.get('/api/bookings/confirm', async (req, res) => {
   const ref = String(req.query.order_id || '');
-  const row = ref && square ? db.prepare('SELECT id FROM bookings WHERE payment_ref = ?').get(ref) : null;
+  const id = Number(req.query.id || 0);
+  const row = ref
+    ? db.prepare('SELECT * FROM bookings WHERE payment_ref = ?').get(ref)
+    : (id ? db.prepare('SELECT * FROM bookings WHERE id = ?').get(id) : null);
   if (!row) return res.status(404).json({ error: 'Booking not found' });
-  try {
-    const { order } = await sq('GET', `/v2/orders/${encodeURIComponent(ref)}`);
-    if (order.state === 'COMPLETED' || (order.tenders || []).length) markPaid(ref);
-  } catch { /* fall through to current status */ }
-  const cur = db.prepare('SELECT service_name, date, time, status, paid, email FROM bookings WHERE id = ?').get(row.id);
-  res.json({ serviceName: cur.service_name, date: cur.date, time: cur.time, status: cur.status, paid: !!cur.paid, email: cur.email });
+  if (square && row.payment_ref && !row.paid) {
+    try {
+      const { order } = await sq('GET', `/v2/orders/${encodeURIComponent(row.payment_ref)}`);
+      if (order.state === 'COMPLETED' || (order.tenders || []).length) markPaid(row.payment_ref);
+    } catch { /* fall through to current status */ }
+  }
+  const cur = db.prepare('SELECT id, service_name, date, time, duration_min, mode, status, paid, email FROM bookings WHERE id = ?').get(row.id);
+  res.json({ id: cur.id, serviceName: cur.service_name, date: cur.date, time: cur.time, durationMin: cur.duration_min, mode: cur.mode, status: cur.status, paid: !!cur.paid, email: cur.email });
 });
 
 app.post('/api/testimonials', limit('testimonial', 5, 3600 * 1000), (req, res) => {
@@ -340,7 +401,8 @@ app.post('/api/admin/logout', (req, res) => {
 });
 app.get('/api/admin/me', requireAdmin, (req, res) => {
   const a = db.prepare('SELECT email FROM admins WHERE id = ?').get(req.adminId);
-  res.json({ email: a.email, payments: Boolean(square), siteUrl: SITE_URL });
+  const s = getSettings();
+  res.json({ email: a.email, payments: Boolean(square), siteUrl: SITE_URL, today: nowIn(s.timezone).date, bibleVersions: bibleList() });
 });
 
 app.get('/api/admin/settings', requireAdmin, (req, res) => res.json(getSettings()));
@@ -349,13 +411,14 @@ app.put('/api/admin/settings', requireAdmin, (req, res) => {
   const next = {};
   for (const [k, def] of Object.entries(DEFAULTS)) {
     if (!(k in b)) continue;
-    if (typeof def === 'string') next[k] = clean(b[k], 4000);
+    if (typeof def === 'string') next[k] = clean(b[k], k === 'coachPhoto' ? 250000 : 4000);
     else if (typeof def === 'number') next[k] = Math.max(0, Number(b[k]) || 0);
     else if (Array.isArray(def)) {
       if (!Array.isArray(b[k])) continue;
       next[k] = b[k].slice(0, 30).map((it) => Object.fromEntries(Object.keys(def[0]).map((f) => [f, clean(it?.[f], 2000)]))).filter((it) => Object.values(it).some(Boolean));
     }
   }
+  if (next.verseVersion && !BIBLE_VERSIONS[next.verseVersion] && next.verseVersion !== 'OTHER') return res.status(400).json({ error: 'Unknown Bible version.' });
   if (next.timezone) { try { new Intl.DateTimeFormat('en', { timeZone: next.timezone }); } catch { return res.status(400).json({ error: 'Unknown time zone (example: America/New_York).' }); } }
   setSettings(next);
   res.json(getSettings());
@@ -410,8 +473,24 @@ app.get('/api/admin/bookings', requireAdmin, (req, res) => res.json(db.prepare('
 app.put('/api/admin/bookings/:id', requireAdmin, (req, res) => {
   const status = req.body?.status;
   if (!['confirmed', 'cancelled'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+  const id = Number(req.params.id);
+  const b = db.prepare('SELECT * FROM bookings WHERE id = ?').get(id);
+  if (!b) return res.status(404).json({ error: 'Booking not found' });
+  const s = getSettings();
+  if (status === 'confirmed' && b.status === 'cancelled') {
+    const start = toMin(b.time), end = start + b.duration_min + s.bufferMin;
+    const conflict = activeBookings(b.date).some((other) => {
+      const os = toMin(other.time), oe = os + other.duration_min + s.bufferMin;
+      return start < oe && end > os;
+    });
+    if (conflict) return res.status(409).json({ error: 'Cannot restore: another booking now occupies that time slot.' });
+  }
   const paid = req.body?.paid === undefined ? null : (req.body.paid ? 1 : 0);
-  db.prepare('UPDATE bookings SET status = ?, paid = COALESCE(?, paid) WHERE id = ?').run(status, paid, Number(req.params.id));
+  db.prepare('UPDATE bookings SET status = ?, paid = COALESCE(?, paid) WHERE id = ?').run(status, paid, id);
+  if (status === 'cancelled' && b.status !== 'cancelled') {
+    sendMail(b.email, `Booking canceled: ${b.service_name}`,
+      `Hi ${b.name},\n\nYour ${b.service_name} session on ${when(b)} has been canceled.${b.paid ? ` Since you paid online, ${s.brandName} will follow up regarding your refund.` : ''}\n\nYou can book a new time at ${SITE_URL}/#book or reply to ${s.email}.\n\n${s.brandName}`);
+  }
   res.json({ ok: true });
 });
 
@@ -471,10 +550,8 @@ function sendBookingEmails(id) {
   sendMail(s.email, `New booking: ${b.name} - ${b.service_name}`,
     `${b.name} <${b.email}> ${b.phone}\n${b.service_name} on ${when(b)}\n${b.price_cents > 0 ? (b.paid ? 'PAID' : 'UNPAID') : 'Free'}\n${b.notes ? `Notes: ${b.notes}\n` : ''}\nManage: ${SITE_URL}/admin`);
 }
-const hoursUntil = (date, time, tz) => { const n = nowIn(tz); return (dayDiff(n.date, date) * 1440 + toMin(time) - n.min) / 60; };
 
 // ----- client accounts (guests book first; accounts are optional and email-verified) -----
-const csessions = new Map(); // token -> { clientId, exp }
 const sha = (v) => crypto.createHash('sha256').update(v).digest('hex');
 const requireClient = (req, res, next) => {
   const s = csessions.get(parseCookies(req).csid);
@@ -538,7 +615,12 @@ app.get('/api/account/me', requireClient, (req, res) => {
   const s = getSettings();
   const bookings = db.prepare('SELECT id, service_name, date, time, duration_min, price_cents, paid, status, mode FROM bookings WHERE email = ? ORDER BY date DESC, time DESC').all(req.client.email)
     .map((b) => ({ ...b, canCancel: b.status !== 'cancelled' && hoursUntil(b.date, b.time, s.timezone) >= s.minNoticeHours }));
-  res.json({ email: req.client.email, name: req.client.name, phone: req.client.phone, bookings, minNoticeHours: s.minNoticeHours, contact: s.email, timezone: s.timezone, inPersonAddress: s.inPersonAddress });
+  res.json({
+    email: req.client.email, name: req.client.name, phone: req.client.phone, bookings,
+    minNoticeHours: s.minNoticeHours, contact: s.email, timezone: s.timezone,
+    inPersonAddress: s.inPersonAddress, onlineInfo: s.onlineInfo, brandName: s.brandName,
+    today: nowIn(s.timezone).date,
+  });
 });
 app.put('/api/account/me', requireClient, (req, res) => {
   db.prepare('UPDATE clients SET name = ?, phone = ? WHERE id = ?').run(clean(req.body?.name, 100), clean(req.body?.phone, 40), req.client.id);
