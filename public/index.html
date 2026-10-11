@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Abide &amp; Thrive | Christian Mental Health Coaching</title>
+  <meta name="description" content="Faith-centered, one-on-one Christian mental health coaching. Book a session online.">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="nav">
+    <div class="wrap nav-in">
+      <a class="brand" href="#top" id="brand">Abide &amp; Thrive</a>
+      <nav aria-label="Main">
+        <a href="#about">About</a>
+        <a href="#services">Services</a>
+        <a href="#testimonials">Stories</a>
+        <a href="#faq">FAQ</a>
+        <a href="/account">My bookings</a>
+        <a class="btn small" href="#book">Book a session</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="wrap">
+        <p class="eyebrow" id="tagline"></p>
+        <h1 id="heroTitle"></h1>
+        <p class="lead" id="heroSubtitle"></p>
+        <blockquote class="verse" id="verseBox" hidden><span id="verse"></span> <cite id="verseRef"></cite></blockquote>
+        <p><a class="btn" href="#book">Book a session</a> <a class="btn ghost" href="#services">See services</a></p>
+      </div>
+    </section>
+
+    <section id="about" class="wrap split">
+      <div>
+        <h2 id="aboutTitle"></h2>
+        <p class="who"><strong id="coachName"></strong><br><span id="coachCredentials" class="muted"></span></p>
+        <div id="aboutBody"></div>
+      </div>
+      <div class="card soft">
+        <h3 id="approachTitle"></h3>
+        <ol class="steps" id="steps"></ol>
+      </div>
+    </section>
+
+    <section id="services" class="band">
+      <div class="wrap">
+        <h2>Services &amp; pricing</h2>
+        <div class="grid" id="serviceList"></div>
+      </div>
+    </section>
+
+    <section id="book" class="wrap">
+      <h2>Book a session</h2>
+      <div id="bookNotice" role="status"></div>
+      <div class="booker" id="booker">
+        <div class="card">
+          <h3>1. Choose a service</h3>
+          <div id="svcPick" class="pick"></div>
+          <h3>2. Pick a date</h3>
+          <label class="sr" for="dateInput">Date</label>
+          <input type="date" id="dateInput">
+          <p class="muted small" id="tzNote"></p>
+          <h3>3. Pick a time</h3>
+          <div id="slots" class="slots" aria-live="polite"><p class="muted">Choose a service and date to see times.</p></div>
+        </div>
+        <form class="card" id="bookForm" novalidate>
+          <h3>4. Your details</h3>
+          <fieldset class="modebox" id="modeBox" hidden>
+            <legend>How would you like to meet?</legend>
+            <label class="check"><input type="radio" name="mode" value="online"> <span>Online (video)</span></label>
+            <label class="check"><input type="radio" name="mode" value="in_person"> <span>In person</span></label>
+          </fieldset>
+          <p class="muted small" id="modeNote"></p>
+          <p class="summary" id="summary">Nothing selected yet.</p>
+          <label>Full name <input name="name" required autocomplete="name" maxlength="100"></label>
+          <label>Email <input name="email" type="email" required autocomplete="email" maxlength="200"></label>
+          <label>Phone (optional) <input name="phone" type="tel" autocomplete="tel" maxlength="40"></label>
+          <label>Anything you’d like me to know? (optional) <textarea name="notes" rows="3" maxlength="1000"></textarea></label>
+          <label class="check"><input type="checkbox" name="consent" required> <span>I understand coaching is not therapy or emergency care.</span></label>
+          <p class="error" id="bookError" role="alert"></p>
+          <button class="btn" id="bookBtn" type="submit" disabled>Select a time</button>
+          <p class="muted small" id="payNote"></p>
+        </form>
+      </div>
+    </section>
+
+    <section id="testimonials" class="band">
+      <div class="wrap">
+        <h2>Client stories</h2>
+        <div class="grid" id="tList"></div>
+        <details class="card share">
+          <summary>Been a client? Share your experience</summary>
+          <form id="tForm" novalidate>
+            <label>Your name (first name or initials are fine) <input name="name" required maxlength="60"></label>
+            <label>Rating
+              <select name="rating"><option value="5">★★★★★ (5)</option><option value="4">★★★★ (4)</option><option value="3">★★★ (3)</option><option value="2">★★ (2)</option><option value="1">★ (1)</option></select>
+            </label>
+            <label>Your testimonial <textarea name="body" rows="4" required minlength="10" maxlength="1500"></textarea></label>
+            <label class="check"><input type="checkbox" name="consent" required> <span>I’m happy for this to be shared publicly on this website.</span></label>
+            <p class="error" id="tError" role="alert"></p>
+            <p class="ok" id="tOk" role="status"></p>
+            <button class="btn" type="submit">Submit testimonial</button>
+            <p class="muted small">Testimonials are reviewed before they appear.</p>
+          </form>
+        </details>
+      </div>
+    </section>
+
+    <section id="faq" class="wrap narrow">
+      <h2>Common questions</h2>
+      <div id="faqList"></div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p class="disclaimer" id="disclaimer"></p>
+      <p><span id="fLocation"></span> · <a id="fEmail" href="#"></a> <span id="fPhoneWrap"></span></p>
+      <p class="muted small">© <span id="year"></span> <span id="fBrand"></span> · <a href="/admin">Admin</a></p>
+    </div>
+  </footer>
+  <script src="/app.js" type="module"></script>
+</body>
+</html>

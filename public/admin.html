@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Admin | Abide &amp; Thrive</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/admin.css">
+</head>
+<body class="admin">
+  <section id="login" class="login card" hidden>
+    <h1>Admin login</h1>
+    <form id="loginForm">
+      <label>Email <input name="email" type="email" required autocomplete="username"></label>
+      <label>Password <input name="password" type="password" required autocomplete="current-password"></label>
+      <p class="error" id="loginError" role="alert"></p>
+      <button class="btn" type="submit">Log in</button>
+    </form>
+    <p><a href="/">← Back to site</a></p>
+  </section>
+
+  <div id="app" hidden>
+    <header class="nav"><div class="wrap nav-in">
+      <strong class="brand">Admin</strong>
+      <nav id="tabs" aria-label="Admin sections">
+        <button data-tab="bookings">Bookings</button>
+        <button data-tab="content">Site content</button>
+        <button data-tab="services">Services</button>
+        <button data-tab="hours">Availability</button>
+        <button data-tab="testimonials">Testimonials</button>
+        <button data-tab="account">Account</button>
+        <a href="/" target="_blank" rel="noopener">View site ↗</a>
+        <button id="logout">Log out</button>
+      </nav>
+    </div></header>
+    <main class="wrap" id="panel"></main>
+  </div>
+  <div id="toast" role="status"></div>
+  <script src="/admin.js" type="module"></script>
+</body>
+</html>
